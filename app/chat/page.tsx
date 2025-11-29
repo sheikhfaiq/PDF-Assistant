@@ -28,7 +28,9 @@ export default function ChatPage() {
   if (!input.trim() || isLoading) return;
 
   const userMsg = input.trim();
-  setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+  const newUserMessage = { role: "user" as const, content: userMsg };
+
+  setMessages(prev => [...prev, newUserMessage]);
   setInput("");
   setIsLoading(true);
 
@@ -36,30 +38,18 @@ export default function ChatPage() {
     const res = await fetch("/api/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: userMsg }),
+      body: JSON.stringify({
+        question: userMsg,
+        history: messages, // ← SEND FULL HISTORY
+      }),
     });
 
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    // THIS IS THE FIX: Extract only the real answer text
-    let answerText = "";
-
-    if (typeof data.answer === "string") {
-      answerText = data.answer;
-    }
-    // LangChain AIMessage object
-    else if (data.answer?.kwargs?.content) {
-      answerText = data.answer.kwargs.content;
-    }
-    // LangChain new format
-    else if (data.answer?.content) {
-      answerText = data.answer.content;
-    }
-    // Fallback
-    else {
-      answerText = "I got a response but couldn't read it.";
-    }
+    const answerText = typeof data.answer === "string"
+      ? data.answer
+      : data.answer?.content || "No answer received.";
 
     setMessages(prev => [...prev, {
       role: "assistant",
@@ -68,10 +58,9 @@ export default function ChatPage() {
     }]);
 
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Connection failed";
     setMessages(prev => [...prev, {
       role: "assistant",
-      content: `Error: ${errorMessage}`
+      content: "Error: Could not connect. Please try again."
     }]);
   } finally {
     setIsLoading(false);
